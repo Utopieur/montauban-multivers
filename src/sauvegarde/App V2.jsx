@@ -5272,32 +5272,6 @@ const MontaubanMultivers = () => {
     );
   }
 
-  // ==================== DOMAINES (labels) ====================
-  const DOMAIN_LABELS = {
-    transports: 'Se déplacer',
-    travail: 'Travailler',
-    sante: 'Se soigner',
-    education: 'Apprendre',
-    alimentation: 'Manger',
-    logement: 'Se loger',
-    securite: 'Sécurité',
-    climat: 'Climat & environnement',
-    liens: 'Liens & loisirs',
-    citoyennete: 'Participer',
-    droits: 'Droits',
-  };
-
-  // Extraire le résumé de contexte (premières lignes significatives)
-  const getContextPreview = (context) => {
-    if (!context) return '';
-    // Prend la première phrase substantielle (après le lieu/heure)
-    const lines = context.split('\n').filter(l => l.trim().length > 0);
-    // Skip la première ligne si c'est juste un lieu/heure court
-    const start = lines[0] && lines[0].length < 40 ? 1 : 0;
-    const preview = lines.slice(start, start + 2).join(' ');
-    return preview.length > 200 ? preview.substring(0, 200) + '…' : preview;
-  };
-
   // ==================== RÉVÉLATION ====================
   if (gameState === 'revelation') {
     return (
@@ -5307,22 +5281,21 @@ const MontaubanMultivers = () => {
           
           <div className="space-y-4">
             <h2 className="text-2xl font-black text-white">Tu as survécu.</h2>
-            <p className="text-white/50">Mais ce n'était pas une seule ville.</p>
+            <p className="text-white/50">Mais ce n'était pas une seule semaine.</p>
           </div>
 
-          <div className="bg-white/5 border border-white/10 p-6 text-white/70 text-sm leading-relaxed space-y-4 text-left">
-            <p>Chaque jour, tu as fait face aux mêmes problèmes. Te déplacer. Travailler. Manger. Te loger. Vivre.</p>
-            <p>Mais le terrain changeait sous tes pieds.</p>
-            <p>Certains jours, tu étais <span className="text-white/90 font-medium">seul face au problème</span>. D'autres jours, <span className="text-white/90 font-medium">quelque chose existait</span> autour de toi.</p>
-            <p className="text-amber-400 pt-2">Les mêmes besoins. Deux villes différentes.</p>
-            <p className="text-white/40">Regarde ce qui changeait — et ce qui ne changeait pas.</p>
+          <div className="bg-white/5 border border-white/10 p-6 text-white/70 text-sm leading-relaxed space-y-3 text-left">
+            <p>Certains jours, tu étais dans un Montauban gouverné par l'extrême-droite.</p>
+            <p>D'autres jours, dans un Montauban de gauche écologiste.</p>
+            <p className="text-amber-400 pt-2">Les règles n'étaient pas les mêmes.</p>
+            <p className="text-white/40">Tu l'as senti, non ?</p>
           </div>
 
           <button 
             onClick={() => setGameState('summary')}
             className="w-full bg-white text-black font-bold py-4 px-8 hover:bg-amber-400 transition-all uppercase tracking-widest text-sm"
           >
-            Voir la comparaison
+            Voir le détail
           </button>
         </div>
       </div>
@@ -5331,37 +5304,30 @@ const MontaubanMultivers = () => {
 
   // ==================== RÉCAPITULATIF ====================
   if (gameState === 'summary' && selectedCharacter) {
-    // Construire les paires de scènes (S0/S1, S2/S3, S4/S5, S6/S7)
-    const pairs = [];
-    for (let i = 0; i < selectedCharacter.scenes.length; i += 2) {
-      const sceneA = selectedCharacter.scenes[i];
-      const sceneB = selectedCharacter.scenes[i + 1];
-      const choiceA = history.find(h => h.sceneIndex === i);
-      const choiceB = history.find(h => h.sceneIndex === i + 1);
-      
-      if (sceneA && sceneB) {
-        pairs.push({
-          domain: sceneA.domain,
-          domainB: sceneB.domain,
-          sceneA,
-          sceneB,
-          choiceA,
-          choiceB,
-        });
-      }
-    }
+    const worldAScenes = history.filter((h, i) => selectedCharacter.scenes[i]?.world === 'A');
+    const worldBScenes = history.filter((h, i) => selectedCharacter.scenes[i]?.world === 'B');
+
+    // Score caché par monde
+    const scoreA = worldAScenes.reduce((acc, h, i) => {
+      const sceneIdx = history.indexOf(h);
+      const choice = selectedCharacter.scenes[sceneIdx]?.choices.find(c => c.id === h.choiceId);
+      if (choice) return acc + Object.values(choice.impact).reduce((s, v) => s + v, 0);
+      return acc;
+    }, 0);
+    const scoreB = worldBScenes.reduce((acc, h, i) => {
+      const sceneIdx = history.indexOf(h);
+      const choice = selectedCharacter.scenes[sceneIdx]?.choices.find(c => c.id === h.choiceId);
+      if (choice) return acc + Object.values(choice.impact).reduce((s, v) => s + v, 0);
+      return acc;
+    }, 0);
 
     return (
       <div className="min-h-screen bg-black p-4">
         <div className="max-w-2xl mx-auto space-y-6 py-8">
-          <div className="text-center space-y-2">
-            <h1 className="text-xl font-black text-white">
-              La semaine de {selectedCharacter.name}
-            </h1>
-            <p className="text-white/40 text-sm">Mêmes problèmes. Deux villes.</p>
-          </div>
+          <h1 className="text-xl font-black text-white text-center">
+            La semaine de {selectedCharacter.name}
+          </h1>
 
-          {/* État final */}
           <div className="bg-white/5 border border-white/10 p-5">
             <p className="text-white/40 text-xs uppercase tracking-widest mb-4">État final</p>
             <div className="grid grid-cols-2 gap-4">
@@ -5372,78 +5338,41 @@ const MontaubanMultivers = () => {
             </div>
           </div>
 
-          {/* Paires domaine par domaine */}
-          {pairs.map((pair, idx) => {
-            const domainLabel = DOMAIN_LABELS[pair.domain] || pair.domain;
-            
-            return (
-              <div key={idx} className="bg-white/5 border border-white/10 overflow-hidden">
-                {/* Titre domaine */}
-                <div className="px-5 py-3 border-b border-white/10 bg-white/5">
-                  <p className="text-amber-400/80 text-sm font-bold uppercase tracking-widest">
-                    {domainLabel}
-                  </p>
-                </div>
-
-                <div className="grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-white/10">
-                  {/* Côté A — la ville sans filet */}
-                  <div className="p-5 space-y-3">
-                    <p className="text-white/30 text-xs uppercase tracking-widest font-mono">Ville A</p>
-                    <p className="text-white/60 text-sm leading-relaxed">
-                      {getContextPreview(pair.sceneA.context)}
-                    </p>
-                    {pair.choiceA && (
-                      <div className="border-l-2 border-white/20 pl-3 mt-3">
-                        <p className="text-white/40 text-xs mb-1">Tu as choisi :</p>
-                        <p className="text-white/80 text-sm">{pair.choiceA.choiceLabel}</p>
-                      </div>
-                    )}
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="bg-red-950/20 border border-red-900/30 p-5">
+              <h3 className="font-bold text-red-400 mb-1">MONTAUBAN-RN</h3>
+              <p className="text-red-400/50 text-xs mb-4">Extrême-droite</p>
+              <div className="space-y-3 text-sm">
+                {worldAScenes.map((h, i) => (
+                  <div key={i} className="border-l border-red-800/50 pl-3">
+                    <p className="text-red-200/80">{h.choiceLabel}</p>
                   </div>
-
-                  {/* Côté B — la ville avec structure */}
-                  <div className="p-5 space-y-3">
-                    <p className="text-white/30 text-xs uppercase tracking-widest font-mono">Ville B</p>
-                    <p className="text-white/60 text-sm leading-relaxed">
-                      {getContextPreview(pair.sceneB.context)}
-                    </p>
-                    {pair.choiceB && (
-                      <div className="border-l-2 border-white/20 pl-3 mt-3">
-                        <p className="text-white/40 text-xs mb-1">Tu as choisi :</p>
-                        <p className="text-white/80 text-sm">{pair.choiceB.choiceLabel}</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                ))}
               </div>
-            );
-          })}
+              <p className="text-red-400/30 text-xs mt-4 font-mono">Impact cumulé : {scoreA > 0 ? '+' : ''}{scoreA}</p>
+            </div>
 
-          {/* Conclusion */}
-          <div className="bg-white/5 border border-white/10 p-6 text-center space-y-4">
-            <p className="text-white/70 text-sm leading-relaxed">
-              Tes choix étaient les tiens. Ni bons ni mauvais.<br />
-              Ce qui changeait, c'est <span className="text-amber-400">ce qui existait autour de toi.</span>
-            </p>
-            <p className="text-white/40 text-xs leading-relaxed">
-              Les murs. Les portes. Les guichets. Les bus. Les prix. Les gens.<br />
-              Dans une ville, tu te débrouillais. Dans l'autre, quelque chose t'attendait.
+            <div className="bg-emerald-950/20 border border-emerald-900/30 p-5">
+              <h3 className="font-bold text-emerald-400 mb-1">MONTAUBAN-MGEC</h3>
+              <p className="text-emerald-400/50 text-xs mb-4">Gauche écolo</p>
+              <div className="space-y-3 text-sm">
+                {worldBScenes.map((h, i) => (
+                  <div key={i} className="border-l border-emerald-800/50 pl-3">
+                    <p className="text-emerald-200/80">{h.choiceLabel}</p>
+                  </div>
+                ))}
+              </div>
+              <p className="text-emerald-400/30 text-xs mt-4 font-mono">Impact cumulé : {scoreB > 0 ? '+' : ''}{scoreB}</p>
+            </div>
+          </div>
+
+          <div className="bg-white/5 border border-white/10 p-6 text-center">
+            <p className="text-white/60 text-sm">
+              Mêmes journées. Mêmes besoins.<br />
+              <span className="text-amber-400">Règles différentes.</span>
             </p>
           </div>
 
-          {/* Révélation politique */}
-          <div className="bg-amber-400/5 border border-amber-400/20 p-6 text-center space-y-3">
-            <p className="text-amber-400/90 text-sm font-medium">
-              La Ville A, c'est Montauban gouvernée par l'extrême-droite.
-            </p>
-            <p className="text-amber-400/90 text-sm font-medium">
-              La Ville B, c'est Montauban gouvernée par la gauche écologiste et citoyenne.
-            </p>
-            <p className="text-white/40 text-xs mt-4">
-              Mêmes rues. Mêmes gens. Règles différentes.
-            </p>
-          </div>
-
-          {/* Actions */}
           <div className="flex gap-3">
             <button 
               onClick={resetGame}
