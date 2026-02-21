@@ -13,7 +13,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ==================== SYSTÈME DE CONDITIONS ====================
 
-const checkConditions = (choice, stats, flags, crossFlags = {}, conseilFlags = {}) => {
+const checkConditions = (choice, stats, flags, crossFlags = {}) => {
   const conditions = choice.conditions || {};
   const reasons = [];
 
@@ -77,24 +77,6 @@ const checkConditions = (choice, stats, flags, crossFlags = {}, conseilFlags = {
         });
       }
     }
-  }
-
-  // Vérifier flag Conseil requis (décision municipale prise avant de jouer)
-  if (conditions.requiresConseilFlag && !conseilFlags[conditions.requiresConseilFlag]) {
-    reasons.push({
-      type: 'conseil_flag',
-      flag: conditions.requiresConseilFlag,
-      icon: Lock
-    });
-  }
-
-  // Vérifier flag Conseil bloquant (choix impossible si la mairie a pris cette décision)
-  if (conditions.blockedByConseilFlag && conseilFlags[conditions.blockedByConseilFlag]) {
-    reasons.push({
-      type: 'conseil_blocked',
-      flag: conditions.blockedByConseilFlag,
-      icon: X
-    });
   }
 
   return {
@@ -4870,7 +4852,7 @@ Ne rien faire. C'est le plus grand luxe d'une mère seule. Et quelqu'un vient de
 
 // ==================== COMPOSANT PRINCIPAL ====================
 
-const MontaubanMultivers = ({ conseilData = null, onRetour = null }) => {
+const MontaubanMultivers = () => {
   const [gameState, setGameState] = useState('intro');
   const [selectedCharacter, setSelectedCharacter] = useState(null);
   const [sceneIndex, setSceneIndex] = useState(0);
@@ -4878,10 +4860,6 @@ const MontaubanMultivers = ({ conseilData = null, onRetour = null }) => {
   const [history, setHistory] = useState([]);
   const [flags, setFlags] = useState({});
   const [crossFlags, setCrossFlags] = useState({});
-
-  // Flags issus du Mode Conseil (décisions municipales prises par le joueur)
-  // Si le Conseil n'a pas été joué, tous les flags sont false (monde par défaut)
-  const conseilFlags = useMemo(() => conseilData?.flags || {}, [conseilData]);
   const [showConsequence, setShowConsequence] = useState(false);
   const [currentChoice, setCurrentChoice] = useState(null);
   const [tooltipStat, setTooltipStat] = useState(null);
@@ -4908,173 +4886,8 @@ const MontaubanMultivers = ({ conseilData = null, onRetour = null }) => {
   // Jours de la semaine pour les transitions
   const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche', 'Lundi'];
 
-  // ==================== PATCH DES SCÈNES SELON DÉCISIONS DU CONSEIL ====================
-  // Injecte des choix supplémentaires dans les scènes selon les flags Conseil.
-  // Ne modifie pas CHARACTERS directement — produit une version enrichie à la volée.
-  const patchScenesWithConseilFlags = (char) => {
-    if (!char || !conseilData) return char;
-
-    const patchedScenes = char.scenes.map(scene => {
-      const extraChoices = [];
-
-      // ── FLAG : transport_gratuit ────────────────────────────────────────────
-      // Mamadou S0 (A, transports) : le chantier bloque, mais le bus est gratuit
-      if (conseilFlags.transport_gratuit && scene.id === 'mamadou_s0') {
-        extraChoices.push({
-          id: 'prendre_bus_gratuit',
-          label: "Laisser le vélo, prendre le bus. C'est gratuit maintenant.",
-          conditions: {},
-          consequence: `Tu gares ton vélo contre un poteau et tu montes dans le 3. Personne ne valide — il n'y a plus rien à valider.\n\nLe chauffeur, Karim, te fait un signe de tête. « Livreur ? »\n\n« Ouais. Le chantier. »\n\n« Ça arrive à tout le monde. Fais attention à ton sac. »\n\nTu arrives avec quatre minutes de retard. Le client est légèrement agacé mais signe. Ton score baisse de quelques points. Mais tu n'as pas de contravention, et tu n'as pas forcé.\n\nTu rembarques dans le prochain bus pour récupérer le vélo. Gratuit. Dans les deux sens.\n\nC'est une petite chose. Mais les petites choses, aujourd'hui, c'est tout ce que tu as.`,
-          impact: { resources: 0, moral: 10, links: 5, comfort: 5 },
-          setsFlag: 'mamadou_prisBus',
-          _conseil_injected: true,
-        });
-      }
-
-      // Clément S0 (A, transports) : TER raté, mais navette urbaine gratuite
-      if (conseilFlags.transport_gratuit && scene.id === 'clement_s0') {
-        extraChoices.push({
-          id: 'navette_gratuite',
-          label: "Prendre la navette urbaine gratuite jusqu'à la gare de Toulouse-Matabiau.",
-          conditions: {},
-          consequence: `La navette interurbaine — lancée il y a six mois par la mairie — part dans huit minutes. Tu avais oublié qu'elle existait.\n\nTu montes. Zéro euro. Le chauffeur est jovial. « Pour Toulouse ? On arrive à Matabiau à 8h10. »\n\nTu envoies un message à ton chef : « TER retardé, j'arrive à 8h15 par la navette. »\n\nIl répond : « OK, on décale de 15 min. »\n\nDans le bus, tu travailles sur les slides. Une dame à côté s'endort. Un étudiant révise ses partiels. La route est fluide.\n\nTu penses à Sophie. Au nombre de fois où vous vous êtes disputés à cause de la voiture, du TER, de l'argent des trajets.\n\nAujourd'hui, ça a coûté zéro. Tu arrives à l'heure. Et tu n'as pas trahi le deal.`,
-          impact: { resources: 5, moral: 15, links: 5, comfort: 5 },
-          setsFlag: 'clement_navetteGratuite',
-          _conseil_injected: true,
-        });
-      }
-
-      // ── FLAG : marche_producteurs_local ────────────────────────────────────
-      // Mamadou S5 (B, alimentation) : le choix "demander" est déverrouillé sans condition links
-      if (conseilFlags.marche_producteurs_local && scene.id === 'mamadou_s5') {
-        return {
-          ...scene,
-          choices: scene.choices.map(c => {
-            if (c.id === 'demander') {
-              return {
-                ...c,
-                conditions: {}, // supprime la condition requiresMinStat: { links: 20 }
-                consequence: `« La Carte Commune, ça marche comment ? »\n\nPhilippe pose ses courgettes. Il prend le temps. Il a l'habitude — depuis que le marché de producteurs a été intégré au dispositif municipal, il explique ça dix fois par samedi.\n\n« C'est un crédit mensuel. 25 euros pour tout le monde sous un certain revenu. Mais c'est pas juste pour acheter. Y'a des ateliers cuisine, des paniers partagés. »\n\nIl sort une carte de visite. « Rachid du Commun peut t'expliquer le reste. »\n\nTu la prends. C'est la deuxième fois qu'on te parle de Rachid en une semaine.`,
-                _conseil_patched: true,
-              };
-            }
-            return c;
-          }),
-          _extra_choices: extraChoices,
-        };
-      }
-
-      // Philippe S1 (B, alimentation) : marché déjà intégré, enrichir le contexte via le flag
-      if (conseilFlags.marche_producteurs_local && scene.id === 'philippe_s1') {
-        extraChoices.push({
-          id: 'mention_appel_offres',
-          label: "Mentionner à l'adjointe que d'autres producteurs pourraient rejoindre le groupement.",
-          conditions: {},
-          consequence: `Tu sors ton carnet. Gérard. Marie-Claire. Sanjay. Trois noms.\n\n« Ces trois-là sont prêts. Si on crée un groupement, on peut couvrir plus de variétés et garantir les volumes. »\n\nL'adjointe appelle son assistante. « Prépare un avenant pour trois fournisseurs supplémentaires. »\n\nTu repars avec ta signature et trois coups de téléphone à passer. Gérard ne répond pas tout de suite — il est dans les rangs de tomates. Mais tu sais qu'il rappellera.\n\nC'est comme ça que les choses commencent. Pas par une grande décision. Par un carnet et trois noms.`,
-          impact: { resources: 10, moral: 15, links: 20, comfort: 5 },
-          setsFlag: 'philippe_groupement',
-          _conseil_injected: true,
-        });
-      }
-
-      // ── FLAG : logement_social_etendu ──────────────────────────────────────
-      // Mamadou S6 (A, logement) : nouveau choix service logement municipal
-      if (conseilFlags.logement_social_etendu && scene.id === 'mamadou_s6') {
-        extraChoices.push({
-          id: 'service_logement',
-          label: "Appeler le service logement de la mairie. Tu as entendu qu'il y avait des places.",
-          conditions: {},
-          consequence: `Le numéro est sur le site de la mairie. Tu t'attendais à une hotline automatique. C'est une vraie personne qui décroche.\n\n« Service logement, bonjour. »\n\nTu expliques : livreur, revenus instables, coloc qui part, délai trois semaines.\n\n« On a des T2 en stock dans le parc public étendu. Villebourbon et Sapiac. Loyer encadré entre 320 et 380 euros. Vous pouvez passer dès demain avec vos trois dernières fiches de paie. »\n\nTu raccroches. Tu regardes ton téléphone.\n\nTrois semaines, c'était le problème. Demain, c'est une solution.`,
-          impact: { resources: 5, moral: 20, links: 10, comfort: 15 },
-          setsFlag: 'mamadou_logementPublic',
-          _conseil_injected: true,
-        });
-      }
-
-      // Nadia S0 (A, logement) : la fuite, le proprio ne répond pas — mais il y a une régie
-      if (conseilFlags.logement_social_etendu && scene.id === 'nadia_s2') {
-        extraChoices.push({
-          id: 'regie_municipale',
-          label: "Appeler la régie technique municipale. Le proprio ne répond pas — la mairie peut intervenir.",
-          conditions: {},
-          consequence: `Tu trouves le numéro sur un flyer glissé sous ta porte il y a trois mois. « Service public d'urgence locative. »\n\nUne voix calme décroche. Tu expliques. La fuite. Les moisissures. Sofiane qui tousse.\n\n« On envoie quelqu'un demain matin. L'intervention est gratuite pour le locataire. On facture ensuite le propriétaire. »\n\nLe lendemain, un technicien sonne à 8h30. Il regarde la fuite, le mur, les taches noires.\n\n« Il faut ouvrir derrière. C'est plus grave que le joint. Votre proprio, il sait ? »\n\n« Il ne répond pas. »\n\nLe technicien note. « On lui envoie une mise en demeure. »\n\nTu fais du café pendant qu'il travaille. Pour la première fois depuis des semaines, tu n'as pas à te battre seule.`,
-          impact: { resources: 0, moral: 20, links: 10, comfort: 15 },
-          setsFlag: 'nadia_regieInterventee',
-          _conseil_injected: true,
-        });
-      }
-
-      // ── FLAG : maison_peuple_ouverte ───────────────────────────────────────
-      // Mamadou S1 (B, transports) : le Commun devient La Maison du Peuple
-      if (conseilFlags.maison_peuple_ouverte && scene.id === 'mamadou_s1') {
-        return {
-          ...scene,
-          context: scene.context.replace(
-            "Tu passes devant le « Commun » — l'ancien local de la Poste, transformé en... tu ne sais pas trop quoi.",
-            "Tu passes devant la Maison du Peuple — l'ancienne bourse du travail, rénovée depuis six mois. Des panneaux dehors : atelier vélo, repair café, cours de français, permanence logement."
-          ),
-          choices: scene.choices.map(c => {
-            if (c.id === 'commun') {
-              return {
-                ...c,
-                label: "T'arrêter à la Maison du Peuple. Cinq minutes.",
-                consequence: `Tu poses ton vélo contre le mur de brique rénovée. Le type à dreadlocks s'appelle Rachid. Il t'a vu arriver.\n\n« Livreur ? Tu as l'air crevé. »\n\nIl te tend un verre d'eau. Froide. Vraiment froide — il y a un vrai frigo maintenant, pas juste un robinet.\n\n« J'étais Deliveroo il y a deux ans. Maintenant je coordonne l'atelier vélo ici. Formation payée par la mairie. Si ça t'intéresse. »\n\nTu regardes l'endroit. Propre. Vivant. Des gens qui réparent des vélos. Une femme qui explique quelque chose à un groupe. Une odeur de café.\n\n« C'est ouvert à tout le monde ? »\n\n« C'est fait pour ça. »\n\nTu prends son numéro. Tu es en retard. Mais tu ressors avec quelque chose que tu ne saurais pas nommer.`,
-                impact: { resources: -5, moral: 20, links: 25, comfort: 15 },
-                _conseil_patched: true,
-              };
-            }
-            return c;
-          }),
-          _extra_choices: extraChoices,
-        };
-      }
-
-      // ── FLAG : conseil_quartier_autonome ───────────────────────────────────
-      // Mamadou S7 (B, citoyenneté) : l'assemblée est accessible sans avoir rencontré Rachid
-      if (conseilFlags.conseil_quartier_autonome && scene.id === 'mamadou_s7') {
-        return {
-          ...scene,
-          choices: scene.choices.map(c => {
-            if (c.id === 'aller') {
-              return {
-                ...c,
-                conditions: {}, // supprime requiresFlag: 'mamadou_metRachid'
-                consequence: `Tu ne connais pas Rachid. Mais tu as vu l'affiche sur le poteau de la rue des Carmes : « Budget participatif — Assemblée citoyenne — Sapiac. »\n\nUne salle des fêtes. Une trentaine de personnes. Du monde varié.\n\nOn parle du parc qui ferme trop tôt. D'un projet de jardin partagé. Des pistes cyclables.\n\nQuelqu'un demande : « Et les livreurs à vélo ? On voit qu'ils galèrent sur le boulevard. »\n\nTu lèves la main. Un peu surpris toi-même.\n\n« Je suis livreur. Je fais 50 bornes par jour. »\n\nSilence. Puis : « On vous écoute. »\n\nTu parles. Les gens écrivent. Ton témoignage est intégré au cahier de doléances. Il ira en mairie.\n\nTu ressors dans la nuit. Quelque chose d'étrange : tu comptes.`,
-                blockedText: undefined,
-                _conseil_patched: true,
-              };
-            }
-            return c;
-          }),
-          _extra_choices: extraChoices,
-        };
-      }
-
-      // ── FLAG : eau_municipalisee ───────────────────────────────────────────
-      // Nadia S0 (A, logement) : la facture d'eau est différente si l'eau est remunicialisée
-      // (contextuel uniquement — enrichit le texte de la conséquence d'un choix)
-      if (conseilFlags.eau_municipalisee && scene.id === 'nadia_s2') {
-        return {
-          ...scene,
-          context: scene.context + `\n\nEn ouvrant le robinet pour remplir la bassine, tu remarques la facture d'eau sur le comptoir. Tarification progressive. Les premiers 50 litres par jour sont gratuits. La tienne est en dessous. La facture est nulle ce mois-ci.`,
-          _extra_choices: extraChoices,
-        };
-      }
-
-      // Si pas de patch spécifique mais des choix extra, les ajouter quand même
-      if (extraChoices.length > 0) {
-        return { ...scene, _extra_choices: extraChoices };
-      }
-
-      return scene;
-    });
-
-    return { ...char, scenes: patchedScenes };
-  };
-
   const selectCharacter = (charId) => {
-    const rawChar = CHARACTERS[charId];
-    const char = patchScenesWithConseilFlags(rawChar) || rawChar;
+    const char = CHARACTERS[charId];
     setSelectedCharacter(char);
     setStats(char.initialStats);
     setFlags({});
@@ -5215,15 +5028,6 @@ const MontaubanMultivers = ({ conseilData = null, onRetour = null }) => {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center p-4">
         <div className="max-w-md w-full space-y-8 text-center">
-          {onRetour && (
-            <button
-              onClick={onRetour}
-              className="flex items-center gap-2 text-white/30 hover:text-white/60 transition-colors text-sm mx-auto"
-            >
-              ← Menu principal
-            </button>
-          )}
-
           <div className="space-y-3">
             <h1 className="text-5xl font-black text-white tracking-tight" style={{ fontFamily: 'system-ui' }}>
               MONTAUBAN
@@ -5231,13 +5035,6 @@ const MontaubanMultivers = ({ conseilData = null, onRetour = null }) => {
             <p className="text-xl font-light text-amber-400/80 tracking-widest uppercase">Multivers</p>
           </div>
           
-          {conseilData && (
-            <div className="bg-amber-400/5 border border-amber-400/20 p-4 text-sm text-amber-400/70 leading-relaxed text-left">
-              <p className="font-mono text-xs uppercase tracking-widest mb-2 text-amber-400/40">Vos décisions en Conseil sont actives</p>
-              <p>Certains choix seront débloqués ou modifiés selon les politiques municipales que vous avez votées.</p>
-            </div>
-          )}
-
           <div className="text-white/50 text-sm leading-relaxed space-y-4 py-4">
             <p>Une semaine. Une ville. Deux réalités.</p>
             <p>Les règles changent sans prévenir.</p>
@@ -5370,8 +5167,8 @@ const MontaubanMultivers = ({ conseilData = null, onRetour = null }) => {
             {/* Choix ou Conséquence */}
             {!showConsequence ? (
               <div className="space-y-2">
-                {[...scene.choices, ...(scene._extra_choices || [])].map((choice) => {
-                  const check = checkConditions(choice, stats, flags, crossFlags, conseilFlags);
+                {scene.choices.map((choice) => {
+                  const check = checkConditions(choice, stats, flags, crossFlags);
                   
                   if (!check.available) {
                     const Icon = check.reasons[0]?.icon || Lock;
@@ -5397,13 +5194,8 @@ const MontaubanMultivers = ({ conseilData = null, onRetour = null }) => {
                     <button
                       key={choice.id}
                       onClick={() => handleChoice(choice)}
-                      className={`w-full text-left p-4 ${ambiance.cardBg} border ${choice._conseil_injected ? 'border-amber-400/30 bg-amber-400/5' : ambiance.border} hover:bg-white/10 hover:border-white/20 transition-all group`}
+                      className={`w-full text-left p-4 ${ambiance.cardBg} border ${ambiance.border} hover:bg-white/10 hover:border-white/20 transition-all group`}
                     >
-                      {choice._conseil_injected && (
-                        <p className="text-amber-400/50 text-xs font-mono uppercase tracking-widest mb-2">
-                          ↳ Possible grâce à vos décisions en Conseil
-                        </p>
-                      )}
                       <p className="text-white/90 text-[15px] group-hover:text-white transition-colors">
                         {choice.label}
                       </p>
