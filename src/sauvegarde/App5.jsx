@@ -1,14 +1,3 @@
-/**
- * Montauban Multivers
- * Licence MIT — Collectif du 2 Juillet (C2J) / MGEC Montauban
- * https://mgec-montauban.fr
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, subject to the following conditions:
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- */
 import React, { useState, useEffect, useMemo } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { 
@@ -141,137 +130,6 @@ const getBlockedText = (choice, reasons) => {
 };
 
 // ==================== PALETTES PAR MONDE (subtile) ====================
-// ==================== PARTAGE & SYNTHÈSE ====================
-
-const GAME_URL = 'https://montauban-multivers.vercel.app';
-
-const DOMAIN_LABELS_SHARE = {
-  transports: 'Se déplacer',
-  travail: 'Travailler',
-  sante: 'Se soigner',
-  education: 'Apprendre',
-  alimentation: 'Manger',
-  logement: 'Se loger',
-  securite: 'Sécurité',
-  climat: 'Environnement',
-  liens: 'Liens sociaux',
-  citoyennete: 'Participer',
-  droits: 'Droits',
-};
-
-const STAT_EMOJI = {
-  resources: '💰',
-  moral: '🧠',
-  links: '🤝',
-  comfort: '🌡️',
-};
-
-/**
- * Génère un texte de synthèse personnalisé selon le parcours du joueur.
- * Conçu pour être lisible seul, sans le jeu sous les yeux.
- */
-const generateShareText = ({ character, stats, history, survived }) => {
-  if (!character || !history.length) return '';
-
-  const finalStats = stats;
-  const totalMean = Math.round(
-    (finalStats.resources + finalStats.moral + finalStats.links + finalStats.comfort) / 4
-  );
-
-  // Résumé de survie
-  const survivalLine = survived
-    ? `J'ai survécu ma semaine à Montauban en jouant ${character.name} (${character.age} ans, ${character.role}).`
-    : `Je n'ai pas survécu ma semaine à Montauban en jouant ${character.name}.`;
-
-  // 2-3 choix marquants (ceux qui font bouger les stats le plus ou les flags narratifs)
-  const worldAChoices = history.filter(h => h.world === 'A').slice(0, 2);
-  const worldBChoices = history.filter(h => h.world === 'B').slice(0, 2);
-
-  const choicesLines = [];
-  if (worldAChoices.length) {
-    choicesLines.push(`Dans la Ville A (${DOMAIN_LABELS_SHARE[worldAChoices[0].domain] || worldAChoices[0].domain}) : "${worldAChoices[0].choiceLabel}"`);
-  }
-  if (worldBChoices.length) {
-    choicesLines.push(`Dans la Ville B (${DOMAIN_LABELS_SHARE[worldBChoices[0].domain] || worldBChoices[0].domain}) : "${worldBChoices[0].choiceLabel}"`);
-  }
-
-  // Stat la plus basse = tension principale
-  const minStatKey = Object.entries(finalStats).sort((a, b) => a[1] - b[1])[0][0];
-  const minStatName = { resources: 'les ressources', moral: 'le moral', links: 'les liens', comfort: 'le confort' }[minStatKey];
-  const tensionLine = survived
-    ? `C'est ${minStatName} qui m'a le plus coûté.`
-    : `C'est ${minStatName} qui a tout fait basculer.`;
-
-  const fullText = [
-    survivalLine,
-    '',
-    choicesLines.join('\n'),
-    '',
-    tensionLine,
-    '',
-    `Les mêmes besoins. Deux villes différentes. Les règles changent tout.`,
-    '',
-    `▶ Joue ta semaine : ${GAME_URL}`,
-    `#MontaubanMultivers #MGEC`,
-  ].join('\n');
-
-  return fullText;
-};
-
-/**
- * Lance le partage natif (mobile) ou ouvre le modal (desktop).
- */
-const shareContent = async ({ text, onFallback }) => {
-  // Web Share API — fonctionne sur mobile Chrome/Safari/Android
-  if (navigator.share) {
-    try {
-      await navigator.share({
-        title: 'Montauban Multivers — ma semaine',
-        text,
-        url: GAME_URL,
-      });
-      return;
-    } catch (e) {
-      // Annulé par l'utilisateur ou non supporté → fallback
-    }
-  }
-  onFallback();
-};
-
-const encodeShare = (text) => encodeURIComponent(text);
-
-const SHARE_PLATFORMS = [
-  {
-    id: 'whatsapp',
-    label: 'WhatsApp',
-    color: 'bg-green-600 hover:bg-green-500',
-    icon: '💬',
-    getUrl: (text) => `https://wa.me/?text=${encodeShare(text)}`,
-  },
-  {
-    id: 'facebook',
-    label: 'Facebook',
-    color: 'bg-blue-700 hover:bg-blue-600',
-    icon: 'f',
-    getUrl: (text) => `https://www.facebook.com/sharer/sharer.php?u=${encodeShare(GAME_URL)}&quote=${encodeShare(text)}`,
-  },
-  {
-    id: 'x',
-    label: 'X / Twitter',
-    color: 'bg-black hover:bg-white/10 border border-white/20',
-    icon: '𝕏',
-    getUrl: (text) => `https://twitter.com/intent/tweet?text=${encodeShare(text)}`,
-  },
-  {
-    id: 'email',
-    label: 'Email',
-    color: 'bg-white/10 hover:bg-white/20 border border-white/20',
-    icon: '✉',
-    getUrl: (text) => `mailto:?subject=Joue%20ta%20semaine%20%C3%A0%20Montauban&body=${encodeShare(text)}`,
-  },
-];
-
-// ==================== WORLD_PALETTE ====================
 const WORLD_PALETTE = {
   A: { tint: 'from-slate-950 via-stone-950 to-slate-950', accent: 'border-slate-800/30' },
   B: { tint: 'from-stone-950 via-slate-950 to-stone-950', accent: 'border-stone-800/30' },
@@ -5032,8 +4890,6 @@ const MontaubanMultivers = ({ conseilData = null, onRetour = null }) => {
   const [globalStats, setGlobalStats] = useState(null);
   const [showTransition, setShowTransition] = useState(false);
   const [transitionText, setTransitionText] = useState('');
-  const [showShareModal, setShowShareModal] = useState(false);
-  const [copyDone, setCopyDone] = useState(false);
 
   useEffect(() => {
     const id = localStorage.getItem('montauban_player_id') || 'local_' + Math.random().toString(36).substr(2, 9);
@@ -5055,43 +4911,6 @@ const MontaubanMultivers = ({ conseilData = null, onRetour = null }) => {
   // ==================== PATCH DES SCÈNES SELON DÉCISIONS DU CONSEIL ====================
   // Injecte des choix supplémentaires dans les scènes selon les flags Conseil.
   // Ne modifie pas CHARACTERS directement — produit une version enrichie à la volée.
-  // ==================== PARTAGE ====================
-  const handleShare = () => {
-    const text = generateShareText({
-      character: selectedCharacter,
-      stats,
-      history,
-      survived: gameState === 'summary' || gameState === 'revelation',
-    });
-    shareContent({
-      text,
-      onFallback: () => setShowShareModal(true),
-    });
-  };
-
-  const handleCopyText = async () => {
-    const text = generateShareText({
-      character: selectedCharacter,
-      stats,
-      history,
-      survived: true,
-    });
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopyDone(true);
-      setTimeout(() => setCopyDone(false), 2500);
-    } catch (e) {
-      // Fallback sélection manuelle
-    }
-  };
-
-  const getShareText = () => generateShareText({
-    character: selectedCharacter,
-    stats,
-    history,
-    survived: true,
-  });
-
   const patchScenesWithConseilFlags = (char) => {
     if (!char || !conseilData) return char;
 
@@ -5381,67 +5200,6 @@ const MontaubanMultivers = ({ conseilData = null, onRetour = null }) => {
   };
 
   // ==================== TRANSITION ENTRE SCÈNES ====================
-  // ==================== MODAL DE PARTAGE ====================
-  const ShareModal = () => {
-    if (!showShareModal) return null;
-    const text = getShareText();
-
-    return (
-      <div
-        className="fixed inset-0 bg-black/80 z-50 flex items-end sm:items-center justify-center p-4"
-        onClick={() => setShowShareModal(false)}
-      >
-        <div
-          className="w-full max-w-sm bg-zinc-950 border border-white/10 p-6 space-y-5"
-          onClick={e => e.stopPropagation()}
-        >
-          {/* Synthèse */}
-          <div>
-            <p className="text-white/30 text-xs uppercase tracking-widest font-mono mb-3">Ta synthèse</p>
-            <div className="bg-white/5 border border-white/10 p-4 rounded-sm">
-              <p className="text-white/70 text-xs leading-relaxed whitespace-pre-line">
-                {text}
-              </p>
-            </div>
-          </div>
-
-          {/* Plateformes */}
-          <div className="space-y-2">
-            <p className="text-white/30 text-xs uppercase tracking-widest font-mono mb-3">Partager via</p>
-            {SHARE_PLATFORMS.map(platform => (
-              <a
-                key={platform.id}
-                href={platform.getUrl(text)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`flex items-center gap-3 w-full px-4 py-3 text-white text-sm font-bold transition-all ${platform.color}`}
-              >
-                <span className="w-5 text-center">{platform.icon}</span>
-                {platform.label}
-              </a>
-            ))}
-
-            {/* Copier le texte */}
-            <button
-              onClick={handleCopyText}
-              className="flex items-center gap-3 w-full px-4 py-3 bg-white/5 border border-white/10 hover:bg-white/10 text-white text-sm font-bold transition-all"
-            >
-              <span className="w-5 text-center">{copyDone ? '✓' : '📋'}</span>
-              {copyDone ? 'Copié !' : 'Copier le texte'}
-            </button>
-          </div>
-
-          <button
-            onClick={() => setShowShareModal(false)}
-            className="w-full text-white/30 text-xs py-2 hover:text-white/60 transition-colors"
-          >
-            Fermer
-          </button>
-        </div>
-      </div>
-    );
-  };
-
   if (showTransition) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
@@ -5902,7 +5660,6 @@ const MontaubanMultivers = ({ conseilData = null, onRetour = null }) => {
               <RotateCcw size={16} /> Rejouer
             </button>
             <button 
-              onClick={handleShare}
               className="flex-1 bg-white text-black font-bold py-3 px-6 hover:bg-amber-400 transition-all uppercase tracking-widest text-xs flex items-center justify-center gap-2"
             >
               <Share2 size={16} /> Partager
@@ -5910,21 +5667,10 @@ const MontaubanMultivers = ({ conseilData = null, onRetour = null }) => {
           </div>
 
           <p className="text-center text-white/30 text-xs pt-4">
-            <a
-              href="https://www.mgec-montauban.fr"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-amber-400 underline"
-            >
+            <a href="https://mgec-montauban.fr" className="hover:text-amber-400 underline">
               Découvrir le programme MGEC →
             </a>
           </p>
-
-          <p className="text-center text-white/20 text-xs">
-            Licence MIT — Collectif du 2 Juillet (C2J)
-          </p>
-
-          <ShareModal />
         </div>
       </div>
     );
