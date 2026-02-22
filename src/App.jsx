@@ -5741,8 +5741,7 @@ const MontaubanMultivers = ({ conseilData = null, onRetour = null }) => {
     if (!save) return;
     const char = CHARACTERS[save.selectedCharacterId];
     if (!char) return;
-    const patched = patchScenesWithConseilFlags(char) || char;
-    setSelectedCharacter(patched);
+    setSelectedCharacter(char); // le patch se fera au prochain selectCharacter si besoin;
     setGameState(save.gameState || 'playing');
     setSceneIndex(save.sceneIndex || 0);
     setStats(save.stats || { resources: 50, moral: 50, links: 30, comfort: 40 });
