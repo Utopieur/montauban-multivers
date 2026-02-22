@@ -10,7 +10,7 @@
  * copies or substantial portions of the Software.
  */
 import React, { useState, useEffect, useMemo } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from './supabaseClient';
 import { 
   Wallet, Brain, Users, Thermometer, ChevronRight, Eye, RotateCcw, 
   Share2, Lock, HelpCircle, X, Target, BarChart3, Heart, User,
@@ -18,9 +18,7 @@ import {
 } from 'lucide-react';
 
 // ==================== CONFIGURATION SUPABASE ====================
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://ton-projet.supabase.co';
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'ta-cle-anon';
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 
 // ==================== SYSTÈME DE CONDITIONS ====================
 
@@ -5741,7 +5739,8 @@ const MontaubanMultivers = ({ conseilData = null, onRetour = null }) => {
     if (!save) return;
     const char = CHARACTERS[save.selectedCharacterId];
     if (!char) return;
-    setSelectedCharacter(char); // le patch se fera au prochain selectCharacter si besoin;
+    const patched = patchScenesWithConseilFlags(char) || char;
+    setSelectedCharacter(patched);
     setGameState(save.gameState || 'playing');
     setSceneIndex(save.sceneIndex || 0);
     setStats(save.stats || { resources: 50, moral: 50, links: 30, comfort: 40 });
