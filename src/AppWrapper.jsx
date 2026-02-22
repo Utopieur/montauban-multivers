@@ -17,11 +17,9 @@ import React, { useState, useEffect } from 'react';
 import { Building, Users, ChevronRight, Clock } from 'lucide-react';
 import MontaubanMultivers from './App';
 import ConseilMode from './ConseilMode';
-if (isAdmin) return (
-  <React.Suspense fallback={null}>
-    <AdminDashboard />
-  </React.Suspense>
-);
+
+// AdminDashboard chargé en lazy pour éviter le double client Supabase au démarrage
+const AdminDashboard = React.lazy(() => import('./AdminDashboard'));
 
 const useAdminRoute = () => {
   const [isAdmin, setIsAdmin] = useState(window.location.hash === '#admin');
@@ -108,7 +106,11 @@ const AppWrapper = () => {
   const [mode, setMode] = useState('selection');
   const [conseilData, setConseilData] = useState(null);
 
-  if (isAdmin) return <AdminDashboard />;
+  if (isAdmin) return (
+    <React.Suspense fallback={null}>
+      <AdminDashboard />
+    </React.Suspense>
+  );
 
   if (mode === 'selection') return <ModeSelection onSelectMode={setMode} />;
 
