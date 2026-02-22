@@ -877,60 +877,6 @@ const computeEndingProfile = (charId, flags) => {
   return profiles.find(p => p.condition(flags)) || profiles[profiles.length - 1];
 };
 
-// ==================== SAUVEGARDE LOCALE ====================
-const SAVE_KEY = 'montauban_save_v1';
-
-const saveGame = (state) => {
-  try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify({
-      ...state,
-      savedAt: Date.now(),
-    }));
-  } catch (e) { /* localStorage indisponible */ }
-};
-
-const loadGame = () => {
-  try {
-    const raw = localStorage.getItem(SAVE_KEY);
-    if (!raw) return null;
-    const save = JSON.parse(raw);
-    // Ne pas charger une sauvegarde de plus de 7 jours
-    if (Date.now() - save.savedAt > 7 * 24 * 60 * 60 * 1000) {
-      localStorage.removeItem(SAVE_KEY);
-      return null;
-    }
-    return save;
-  } catch (e) { return null; }
-};
-
-const clearSave = () => {
-  try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
-};
-
-const formatSaveDate = (ts) => {
-  const d = new Date(ts);
-  const now = new Date();
-  const diffH = Math.round((now - d) / 3600000);
-  if (diffH < 1) return 'il y a quelques minutes';
-  if (diffH < 24) return `il y a ${diffH}h`;
-  return `il y a ${Math.round(diffH / 24)} jour${diffH > 48 ? 's' : ''}`;
-};
-
-// ==================== ANALYTICS (Supabase) ====================
-// Table à créer dans Supabase :
-// analytics_events(id, created_at, player_id, event, data JSONB)
-
-const trackEvent = async (supabase, playerId, event, data = {}) => {
-  if (!supabase || !playerId) return;
-  try {
-    await supabase.from('analytics_events').insert([{
-      player_id: playerId,
-      event,
-      data,
-    }]);
-  } catch (e) { /* silencieux */ }
-};
-
 // ==================== WORLD_PALETTE ====================
 const WORLD_PALETTE = {
   A: { tint: 'from-slate-950 via-stone-950 to-slate-950', accent: 'border-slate-800/30' },
@@ -5694,18 +5640,11 @@ const MontaubanMultivers = ({ conseilData = null, onRetour = null }) => {
   const [transitionText, setTransitionText] = useState('');
   const [showShareModal, setShowShareModal] = useState(false);
   const [copyDone, setCopyDone] = useState(false);
-  const [hasSave, setHasSave] = useState(false);
-  const [returnedPlayer, setReturnedPlayer] = useState(false); // joueur qui reprend une partie
 
   useEffect(() => {
     const id = localStorage.getItem('montauban_player_id') || 'local_' + Math.random().toString(36).substr(2, 9);
     localStorage.setItem('montauban_player_id', id);
     setPlayerId(id);
-    // Détecter sauvegarde existante
-    const save = loadGame();
-    if (save && save.selectedCharacterId && save.gameState !== 'summary' && save.gameState !== 'gameover') {
-      setHasSave(true);
-    }
   }, []);
 
   const ambiance = useMemo(() => {
@@ -5722,42 +5661,6 @@ const MontaubanMultivers = ({ conseilData = null, onRetour = null }) => {
   // ==================== PATCH DES SCÈNES SELON DÉCISIONS DU CONSEIL ====================
   // Injecte des choix supplémentaires dans les scènes selon les flags Conseil.
   // Ne modifie pas CHARACTERS directement — produit une version enrichie à la volée.
-  // ==================== SAUVEGARDE & REPRISE ====================
-  const saveCurrentGame = (overrides = {}) => {
-    if (!selectedCharacter) return;
-    saveGame({
-      selectedCharacterId: selectedCharacter.id,
-      gameState,
-      sceneIndex,
-      stats,
-      flags,
-      history,
-      ...overrides,
-    });
-  };
-
-  const resumeGame = () => {
-    const save = loadGame();
-    if (!save) return;
-    const char = CHARACTERS[save.selectedCharacterId];
-    if (!char) return;
-    const patched = patchScenesWithConseilFlags(char) || char;
-    setSelectedCharacter(patched);
-    setGameState(save.gameState || 'playing');
-    setSceneIndex(save.sceneIndex || 0);
-    setStats(save.stats || { resources: 50, moral: 50, links: 30, comfort: 40 });
-    setFlags(save.flags || {});
-    setHistory(save.history || []);
-    setShowConsequence(false);
-    setCurrentChoice(null);
-    setHasSave(false);
-    setReturnedPlayer(true);
-    trackEvent(supabase, playerId, 'game_resumed', { characterId: save.selectedCharacterId });
-  };
-
-  // ==================== ANALYTICS ====================
-  const track = (event, data = {}) => trackEvent(supabase, playerId, event, data);
-
   // ==================== PARTAGE ====================
   const handleShare = () => {
     const text = generateShareText({
@@ -5966,16 +5869,6 @@ const MontaubanMultivers = ({ conseilData = null, onRetour = null }) => {
     setSceneIndex(0);
     setSessionGoal({ text: "Survive la semaine. Fais tes choix. Assume." });
     setGameState('tutorial');
-    track('character_selected', { characterId: charId });
-    // Sauvegarde initiale
-    saveGame({
-      selectedCharacterId: charId,
-      gameState: 'tutorial',
-      sceneIndex: 0,
-      stats: char.initialStats,
-      flags: {},
-      history: [],
-    });
   };
 
   const handleChoice = (choice) => {
@@ -5994,47 +5887,25 @@ const MontaubanMultivers = ({ conseilData = null, onRetour = null }) => {
     };
     setStats(newStats);
 
-    const newFlags = currentChoice.setsFlag
-      ? { ...flags, [currentChoice.setsFlag]: true }
-      : flags;
-    if (currentChoice.setsFlag) setFlags(newFlags);
+    if (currentChoice.setsFlag) {
+      setFlags({ ...flags, [currentChoice.setsFlag]: true });
+    }
 
-    const newHistory = [...history, {
+    setHistory([...history, {
       sceneIndex,
       world: scene.world,
       domain: scene.domain,
       choiceId: currentChoice.id,
       choiceLabel: currentChoice.label,
-    }];
-    setHistory(newHistory);
-
-    // Analytics
-    track('choice_made', {
-      characterId: selectedCharacter.id,
-      sceneId: scene.id,
-      choiceId: currentChoice.id,
-      world: scene.world,
-      domain: scene.domain,
-      sceneIndex,
-    });
+    }]);
 
     setShowConsequence(false);
     setCurrentChoice(null);
 
     if (Object.values(newStats).some(v => v <= 0)) {
-      clearSave();
-      track('game_over', { characterId: selectedCharacter.id, sceneIndex });
       setGameState('gameover');
     } else if (sceneIndex < selectedCharacter.scenes.length - 1) {
-      // Sauvegarder avant la transition
-      saveGame({
-        selectedCharacterId: selectedCharacter.id,
-        gameState: 'playing',
-        sceneIndex: sceneIndex + 1,
-        stats: newStats,
-        flags: newFlags,
-        history: newHistory,
-      });
+      // Transition entre scènes
       const nextDay = DAYS[Math.min(sceneIndex + 1, 7)];
       setTransitionText(nextDay + '.');
       setShowTransition(true);
@@ -6043,19 +5914,11 @@ const MontaubanMultivers = ({ conseilData = null, onRetour = null }) => {
         setSceneIndex(sceneIndex + 1);
       }, 1200);
     } else {
-      clearSave();
-      track('game_completed', {
-        characterId: selectedCharacter.id,
-        finalStats: newStats,
-        flagCount: Object.keys(newFlags).length,
-      });
       setGameState('revelation');
     }
   };
 
   const resetGame = () => {
-    clearSave();
-    track('game_reset', { characterId: selectedCharacter?.id });
     setGameState('intro');
     setSelectedCharacter(null);
     setSceneIndex(0);
@@ -6064,8 +5927,6 @@ const MontaubanMultivers = ({ conseilData = null, onRetour = null }) => {
     setFlags({});
     setShowConsequence(false);
     setCurrentChoice(null);
-    setReturnedPlayer(false);
-    setHasSave(false);
   };
 
   // Composant jauge compact
@@ -6100,31 +5961,15 @@ const MontaubanMultivers = ({ conseilData = null, onRetour = null }) => {
             <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-52 p-3 bg-black/95 border border-white/10 rounded-lg shadow-xl z-50 text-left">
               <p className="font-medium text-white text-sm mb-1">{info.name}</p>
               <p className="text-xs text-white/60 leading-relaxed">{info.description}</p>
-              {isCritical && <p className="text-xs text-red-400 mt-2 font-medium">⚠ Niveau critique</p>}
-              {isLow && !isCritical && <p className="text-xs text-orange-400 mt-2">Attention : niveau bas</p>}
             </div>
           )}
         </div>
       );
     }
 
-    // Mode non-compact : tooltip au clic sur l'icône
     return (
       <div className="flex items-center gap-3">
-        <div
-          className="relative cursor-help"
-          onClick={(e) => { e.stopPropagation(); setTooltipStat(tooltipStat === statKey ? null : statKey); }}
-        >
-          <Icon size={18} className={isCritical ? 'text-red-400 animate-pulse' : isLow ? 'text-red-300' : c.text} />
-          {tooltipStat === statKey && (
-            <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 w-56 p-3 bg-black/95 border border-white/10 rounded-lg shadow-xl z-50">
-              <p className="font-medium text-white text-sm mb-1">{info.name}</p>
-              <p className="text-xs text-white/60 leading-relaxed">{info.description}</p>
-              {isCritical && <p className="text-xs text-red-400 mt-2 font-medium">⚠ Niveau critique — danger</p>}
-              {isLow && !isCritical && <p className="text-xs text-orange-400 mt-2">Niveau bas</p>}
-            </div>
-          )}
-        </div>
+        <Icon size={18} className={isCritical ? 'text-red-400 animate-pulse' : isLow ? 'text-red-300' : c.text} />
         <div className="flex-1">
           <div className="flex justify-between text-xs mb-1">
             <span className="text-white/60 font-medium">{info.name}</span>
@@ -6215,9 +6060,6 @@ const MontaubanMultivers = ({ conseilData = null, onRetour = null }) => {
 
   // ==================== INTRO ====================
   if (gameState === 'intro') {
-    const save = hasSave ? loadGame() : null;
-    const saveChar = save ? CHARACTERS[save.selectedCharacterId] : null;
-
     return (
       <div className="min-h-screen bg-black flex items-center justify-center p-4">
         <div className="max-w-md w-full space-y-8 text-center">
@@ -6244,47 +6086,20 @@ const MontaubanMultivers = ({ conseilData = null, onRetour = null }) => {
             </div>
           )}
 
-          {/* Sauvegarde détectée */}
-          {hasSave && saveChar && (
-            <div className="bg-white/5 border border-white/10 p-5 text-left space-y-3">
-              <p className="text-white/30 text-xs uppercase tracking-widest font-mono">Partie en cours</p>
-              <p className="text-white/80 text-sm">
-                {saveChar.name} — scène {(save.sceneIndex || 0) + 1}/8
-              </p>
-              <p className="text-white/30 text-xs">Sauvegardée {formatSaveDate(save.savedAt)}</p>
-              <button
-                onClick={resumeGame}
-                className="w-full bg-amber-400 text-black font-bold py-3 px-6 hover:bg-amber-300 transition-all uppercase tracking-widest text-xs"
-              >
-                ▶ Reprendre la partie
-              </button>
-              <button
-                onClick={() => { clearSave(); setHasSave(false); }}
-                className="w-full text-white/20 hover:text-white/40 text-xs py-1 transition-colors"
-              >
-                Effacer et recommencer
-              </button>
-            </div>
-          )}
+          <div className="text-white/50 text-sm leading-relaxed space-y-4 py-4">
+            <p>Une semaine. Une ville. Deux réalités.</p>
+            <p>Les règles changent sans prévenir.</p>
+            <p className="text-amber-400/70">Tu le sentiras.</p>
+          </div>
 
-          {!hasSave && (
-            <>
-              <div className="text-white/50 text-sm leading-relaxed space-y-4 py-4">
-                <p>Une semaine. Une ville. Deux réalités.</p>
-                <p>Les règles changent sans prévenir.</p>
-                <p className="text-amber-400/70">Tu le sentiras.</p>
-              </div>
-
-              <button 
-                onClick={() => { track('game_started'); setGameState('character'); }}
-                className="w-full bg-white text-black font-bold py-4 px-8 rounded-none hover:bg-amber-400 transition-all uppercase tracking-widest text-sm"
-              >
-                Commencer
-              </button>
-              
-              <p className="text-white/30 text-xs">~10 minutes • Choix irréversibles</p>
-            </>
-          )}
+          <button 
+            onClick={() => setGameState('character')}
+            className="w-full bg-white text-black font-bold py-4 px-8 rounded-none hover:bg-amber-400 transition-all uppercase tracking-widest text-sm"
+          >
+            Commencer
+          </button>
+          
+          <p className="text-white/30 text-xs">~10 minutes • Choix irréversibles</p>
         </div>
       </div>
     );
@@ -6398,18 +6213,9 @@ const MontaubanMultivers = ({ conseilData = null, onRetour = null }) => {
               const memLines = (MEMORY_LINES[scene.id] || []).filter(m =>
                 flags[m.flag] && (!m.notFlag || !flags[m.notFlag])
               );
-              // Ligne spéciale si le joueur reprend après une interruption
-              const returnLine = returnedPlayer && sceneIndex === (history.length) ? {
-                text: "Tu es revenu. La ville t'attendait.",
-              } : null;
-              if (!memLines.length && !returnLine) return null;
+              if (!memLines.length) return null;
               return (
                 <div className="border-l-2 border-amber-400/20 pl-4 space-y-2">
-                  {returnLine && (
-                    <p className="text-amber-400/40 text-sm italic leading-relaxed">
-                      {returnLine.text}
-                    </p>
-                  )}
                   {memLines.map((m, i) => (
                     <p key={i} className="text-amber-400/50 text-sm italic leading-relaxed">
                       {m.text}
