@@ -5735,22 +5735,26 @@ const MontaubanMultivers = ({ conseilData = null, onRetour = null }) => {
   };
 
   const resumeGame = () => {
-    const save = loadGame();
-    if (!save) return;
-    const char = CHARACTERS[save.selectedCharacterId];
-    if (!char) return;
-    const patched = patchScenesWithConseilFlags(char) || char;
-    setSelectedCharacter(patched);
-    setGameState(save.gameState || 'playing');
-    setSceneIndex(save.sceneIndex || 0);
-    setStats(save.stats || { resources: 50, moral: 50, links: 30, comfort: 40 });
-    setFlags(save.flags || {});
-    setHistory(save.history || []);
-    setShowConsequence(false);
-    setCurrentChoice(null);
-    setHasSave(false);
-    setReturnedPlayer(true);
-    trackEvent(supabase, playerId, 'game_resumed', { characterId: save.selectedCharacterId });
+    try {
+      const save = loadGame();
+      if (!save) return;
+      const char = CHARACTERS[save.selectedCharacterId];
+      if (!char) return;
+      const sceneIdx = Math.min(save.sceneIndex || 0, char.scenes.length - 1);
+      setSelectedCharacter(char);
+      setSceneIndex(sceneIdx);
+      setStats(save.stats || char.initialStats);
+      setFlags(save.flags || {});
+      setHistory(save.history || []);
+      setShowConsequence(false);
+      setCurrentChoice(null);
+      setHasSave(false);
+      setReturnedPlayer(true);
+      setGameState('playing');
+    } catch (e) {
+      clearSave();
+      setHasSave(false);
+    }
   };
 
   // ==================== ANALYTICS ====================
