@@ -6370,7 +6370,7 @@ const MontaubanMultivers = ({ conseilData = null, onRetour = null }) => {
   }
 
   // ==================== JEU ====================
-  if (gameState === 'play' && selectedCharacter) {
+  if (gameState === 'playing' && selectedCharacter) {
     const scene = selectedCharacter.scenes[sceneIndex];
     const worldPalette = WORLD_PALETTE[scene.world] || WORLD_PALETTE.A;
     
