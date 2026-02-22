@@ -17,7 +17,11 @@ import React, { useState, useEffect } from 'react';
 import { Building, Users, ChevronRight, Clock } from 'lucide-react';
 import MontaubanMultivers from './App';
 import ConseilMode from './ConseilMode';
-import AdminDashboard from './AdminDashboard';
+if (isAdmin) return (
+  <React.Suspense fallback={null}>
+    <AdminDashboard />
+  </React.Suspense>
+);
 
 const useAdminRoute = () => {
   const [isAdmin, setIsAdmin] = useState(window.location.hash === '#admin');
